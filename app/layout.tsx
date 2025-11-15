@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono, Inter } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { AudioProvider } from '@/contexts/audio-context'
+import { AuthProvider } from '@/contexts/auth-context'
 import GlobalAudioPlayer from '@/components/global-audio-player'
 import './globals.css'
 
@@ -40,11 +41,13 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${interFont.className} font-sans antialiased`}>
-        <AudioProvider>
-          {children}
-          <GlobalAudioPlayer />
-          <Analytics />
-        </AudioProvider>
+        <AuthProvider>
+          <AudioProvider>
+            {children}
+            <GlobalAudioPlayer />
+            <Analytics />
+          </AudioProvider>
+        </AuthProvider>
       </body>
     </html>
   )

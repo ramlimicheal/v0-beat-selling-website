@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Navigation from '@/components/navigation'
-import Hero from '@/components/hero'
+import SuperEnhancedHero from '@/components/super-enhanced-hero'
 import TrendingBeats from '@/components/trending-beats'
 import BeatGrid from '@/components/beat-grid'
 import ProducerTools from '@/components/producer-tools'
@@ -15,7 +15,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#121212] via-[#121212] to-[#0a0a0a]">
       <Navigation />
-      <Hero onSearch={setSearchQuery} />
+      <SuperEnhancedHero onSearch={setSearchQuery} />
       <TrendingBeats />
       <BeatGrid category="trending" title="Trending Beats" />
       <BeatGrid category="featured" title="Featured Artists" />

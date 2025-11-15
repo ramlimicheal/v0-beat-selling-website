@@ -1,7 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useState, useRef, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { createClient } from '@/lib/supabase/client'
 
 interface Beat {
   id: string
@@ -24,6 +24,15 @@ interface AudioContextType {
   currentTime: number
   volume: number
   setVolume: (vol: number) => void
+  queue: Beat[]
+  addToQueue: (beat: Beat) => void
+  removeFromQueue: (beatId: string) => void
+  playNext: () => void
+  playPrevious: () => void
+  toggleShuffle: () => void
+  toggleRepeat: () => void
+  isShuffle: boolean
+  repeatMode: 'off' | 'one' | 'all'
 }
 
 const AudioContext = createContext<AudioContextType | undefined>(undefined)
@@ -33,14 +42,28 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [volume, setVolume] = useState(0.8)
+  const [queue, setQueue] = useState<Beat[]>([])
+  const [currentIndex, setCurrentIndex] = useState(-1)
+  const [isShuffle, setIsShuffle] = useState(false)
+  const [repeatMode, setRepeatMode] = useState<'off' | 'one' | 'all'>('off')
   const audioRef = useRef<HTMLAudioElement>(null)
+  const supabase = createClient()
 
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
 
     const handleTimeUpdate = () => setCurrentTime(audio.currentTime)
-    const handleEnded = () => setIsPlaying(false)
+    const handleEnded = () => {
+      if (repeatMode === 'one') {
+        audio.currentTime = 0
+        audio.play()
+      } else if (repeatMode === 'all' || currentIndex < queue.length - 1) {
+        playNext()
+      } else {
+        setIsPlaying(false)
+      }
+    }
 
     audio.addEventListener('timeupdate', handleTimeUpdate)
     audio.addEventListener('ended', handleEnded)
@@ -50,7 +73,22 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       audio.removeEventListener('timeupdate', handleTimeUpdate)
       audio.removeEventListener('ended', handleEnded)
     }
-  }, [volume])
+  }, [volume, currentIndex, queue.length, repeatMode])
+
+  const recordPlay = async (beatId: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      await supabase.from('play_history').insert({
+        user_id: user?.id || null,
+        beat_id: beatId,
+        played_at: new Date().toISOString()
+      })
+
+      await supabase.rpc('increment_plays', { beat_id: beatId })
+    } catch (error) {
+      console.error('Error recording play:', error)
+    }
+  }
 
   const play = (beat: Beat) => {
     if (audioRef.current) {
@@ -59,6 +97,11 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       setCurrentBeat(beat)
       setIsPlaying(true)
       setCurrentTime(0)
+      recordPlay(beat.id)
+
+      const newQueue = [beat, ...queue.filter(b => b.id !== beat.id)]
+      setQueue(newQueue)
+      setCurrentIndex(0)
     }
   }
 
@@ -82,6 +125,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       audioRef.current.currentTime = 0
       setIsPlaying(false)
       setCurrentTime(0)
+      setCurrentBeat(null)
     }
   }
 
@@ -92,8 +136,80 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const addToQueue = (beat: Beat) => {
+    setQueue(prev => [...prev, beat])
+  }
+
+  const removeFromQueue = (beatId: string) => {
+    setQueue(prev => prev.filter(b => b.id !== beatId))
+  }
+
+  const playNext = () => {
+    if (queue.length === 0) return
+
+    let nextIndex = currentIndex + 1
+    if (isShuffle) {
+      nextIndex = Math.floor(Math.random() * queue.length)
+    } else if (nextIndex >= queue.length) {
+      nextIndex = 0
+    }
+
+    setCurrentIndex(nextIndex)
+    const nextBeat = queue[nextIndex]
+    if (nextBeat) {
+      play(nextBeat)
+    }
+  }
+
+  const playPrevious = () => {
+    if (queue.length === 0) return
+
+    let prevIndex = currentIndex - 1
+    if (prevIndex < 0) {
+      prevIndex = queue.length - 1
+    }
+
+    setCurrentIndex(prevIndex)
+    const prevBeat = queue[prevIndex]
+    if (prevBeat) {
+      play(prevBeat)
+    }
+  }
+
+  const toggleShuffle = () => {
+    setIsShuffle(prev => !prev)
+  }
+
+  const toggleRepeat = () => {
+    setRepeatMode(prev => {
+      if (prev === 'off') return 'all'
+      if (prev === 'all') return 'one'
+      return 'off'
+    })
+  }
+
   return (
-    <AudioContext.Provider value={{ currentBeat, isPlaying, play, pause, resume, stop, seek, currentTime, volume, setVolume }}>
+    <AudioContext.Provider value={{
+      currentBeat,
+      isPlaying,
+      play,
+      pause,
+      resume,
+      stop,
+      seek,
+      currentTime,
+      volume,
+      setVolume,
+      queue,
+      addToQueue,
+      removeFromQueue,
+      playNext,
+      playPrevious,
+      toggleShuffle,
+      toggleRepeat,
+      isShuffle,
+      repeatMode
+    }}>
       <audio ref={audioRef} crossOrigin="anonymous" />
       {children}
     </AudioContext.Provider>
